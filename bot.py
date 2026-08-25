@@ -1,4 +1,4 @@
-import telebot
+    import telebot
 import requests
 import os
 import re
@@ -148,7 +148,7 @@ def show_sub_buttons(call):
         markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"buys_{p_key}_{sub_key}"))
 
     markup.add(types.InlineKeyboardButton("⬅️ နောက်သို့ ပြန်သွားရန်", callback_data=f"plan_{p_key}"))
-    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=menu_text, reply_markup=parse_mode="Markdown)
+    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=menu_text, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def back_to_main(call):
@@ -157,7 +157,7 @@ def back_to_main(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     for p_key, p_val in PLANS.items():
         markup.add(types.InlineKeyboardButton(p_val["name"], callback_data=f"plan_{p_key}"))
-    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=welcome_text, reply_markup=markup, )reply_markup=markup, parse_mode="Markdown"
+    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=welcome_text, reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("buyc_") or call.data.startswith("buys_"))
 def handle_package_selection(call):
