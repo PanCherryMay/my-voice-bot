@@ -1,4 +1,4 @@
-import telebot
+       import telebot
 import requests
 import os
 import re
@@ -208,14 +208,10 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
-        # Gemini API Request ပို့ရန် URL နှင့် Headers
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY
-        }
+        # API Key ကို URL Query Parameter တွင် တိုက်ရိုက် ထည့်သွင်းခြင်း
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
         
-        # Gemini သို့ ငွေပမာဏ ပါ တိတိကျကျ စစ်ဆေးခိုင်းသည့် Prompt
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
             "ပုံထဲမှ အချက်အလက်များကို စစ်ဆေးပြီး အောက်ပါအတိုင်း သီးသန့် အကြောင်းပြန်ပေးပါ။\n"
