@@ -13,13 +13,16 @@ from gradio_client import Client, handle_file
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
     handler = http.server.SimpleHTTPRequestHandler
-    with socketserver.TCPServer(("", port), handler) as httpd:
-        httpd.serve_forever()
+    try:
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            httpd.serve_forever()
+    except Exception as e:
+        print(f"Dummy server error: {e}")
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- Bot Token နှင့် API Keys ---
-BOT_TOKEN = "8832097622:AAGDRdS2MnUF9fIr_nObk7k_o-MrWxsCLzI"
+# --- Bot Token နှင့် API Keys (Token အသစ် ထည့်သွင်းပြီး) ---
+BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
 GEMINI_API_KEY = "AQ.Ab8RN6ILlFGZM_OZUpUxYYWNdBcLR6enXSzH5mlw0NgfGqDNBg"
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
@@ -298,11 +301,11 @@ def handle_audio_input(message):
     state = user_states[user_id]
     bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံပြောင်းလဲနေပါသည် ခဏစောင့်ပါ...")
 
+    input_audio_path = f"input_{user_id}.wav"
     try:
         file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        input_audio_path = f"input_{user_id}.wav"
         with open(input_audio_path, 'wb') as f:
             f.write(downloaded_file)
 
@@ -317,12 +320,19 @@ def handle_audio_input(message):
         with open(output_audio_path, 'rb') as converted_audio:
             bot.send_voice(user_id, converted_audio, caption="🎤 အသံပြောင်းလဲပေးထားသော ဖိုင်ဖြစ်ပါတယ် ပန်းချယ်ရီမေ!")
 
-        if os.path.exists(input_audio_path):
-            os.remove(input_audio_path)
-
     except Exception as e:
         bot.reply_to(message, f"❌ အသံပြောင်းရာတွင် အမှားအယွင်းရှိပါသည်: {str(e)}")
+    finally:
+        if os.path.exists(input_audio_path):
+            try:
+                os.remove(input_audio_path)
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     print("Bot start running...")
-    bot.infinity_polling()
+    try:
+        bot.remove_webhook()
+    except Exception:
+        pass
+    bot.infinity_polling(skip_pending_updates=True)
