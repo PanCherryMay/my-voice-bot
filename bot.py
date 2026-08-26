@@ -8,7 +8,8 @@ from gradio_client import Client, handle_file
 
 # --- Bot Token နှင့် API Keys ---
 BOT_TOKEN = "8832097622:AAGDRdS2MnUF9fIr_nObk7k_o-MrWxsCLzI"
-GEMINI_API_KEY = "AQ.Ab8RN6L4ZGR223Ki7JA9i2nmcpeStJk3I_QisYjgMwSo1z7Ihw"
+GEMINI_API_KEY = "AQ.Ab8RN6ILlFGZM_OZUpUxYYWNdBcLR6enXSzH5mlw0NgfGqDNBg"
+
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
