@@ -10,7 +10,6 @@ from gradio_client import Client, handle_file
 BOT_TOKEN = "8832097622:AAGDRdS2MnUF9fIr_nObk7k_o-MrWxsCLzI"
 GEMINI_API_KEY = "AQ.Ab8RN6ILlFGZM_OZUpUxYYWNdBcLR6enXSzH5mlw0NgfGqDNBg"
 
-
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
 HF_TOKEN = "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"
@@ -209,7 +208,12 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        # Gemini API Request ပို့ရန် URL နှင့် Headers
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY
+        }
         
         # Gemini သို့ ငွေပမာဏ ပါ တိတိကျကျ စစ်ဆေးခိုင်းသည့် Prompt
         prompt_text = (
@@ -221,7 +225,7 @@ def handle_slip_photo(message):
         )
         payload = {"contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "image/jpeg", "data": base64_image}}]}]}
 
-        response = requests.post(url, json=payload, timeout=30)
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
         res_data = response.json()
 
         if "error" in res_data:
