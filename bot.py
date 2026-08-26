@@ -203,7 +203,7 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
             "ပုံထဲမှ လုပ်ဆောင်မှုအမှတ် (Transaction ID / Ref No)၊ လက်ခံသူ၊ ငွေပမာဏ နှင့် ရက်စွဲ တို့ကို စစ်ဆေးပေးပါ။ "
