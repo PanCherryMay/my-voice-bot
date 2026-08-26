@@ -3,8 +3,20 @@ import requests
 import os
 import re
 import base64
+import http.server
+import socketserver
+import threading
 from telebot import types
 from gradio_client import Client, handle_file
+
+# --- Render Web Service အတွက် Port အတု ဖွင့်ပေးသည့် Server ---
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", port), handler) as httpd:
+        httpd.serve_forever()
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # --- Bot Token နှင့် API Keys ---
 BOT_TOKEN = "8832097622:AAGDRdS2MnUF9fIr_nObk7k_o-MrWxsCLzI"
@@ -197,7 +209,6 @@ def handle_slip_photo(message):
     state = user_states[user_id]
     expected_price = state['price']
 
-    # User Profile အချက်အလက်များ ထုတ်ယူခြင်း
     user_info = message.from_user
     full_name = f"{user_info.first_name or ''} {user_info.last_name or ''}".strip()
     username = f"@{user_info.username}" if user_info.username else "မရှိပါ"
@@ -208,7 +219,6 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
-        # API Key ကို URL Query Parameter တွင် တိုက်ရိုက် ထည့်သွင်းခြင်း
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
         
@@ -232,11 +242,9 @@ def handle_slip_photo(message):
         if "candidates" in res_data and len(res_data["candidates"]) > 0:
             reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
             
-            # 1. Ref No စစ်ဆေးခြင်း
             match_ref = re.search(r'REF_NO[:\s]*([A-Za-z0-9]+)', reply_text, re.IGNORECASE)
             ref_no = match_ref.group(1).strip() if match_ref else None
 
-            # 2. ငွေပမာဏ (Amount) စစ်ဆေးခြင်း
             match_amount = re.search(r'AMOUNT[:\s]*([0-9,]+)', reply_text, re.IGNORECASE)
             paid_amount = 0
             if match_amount:
@@ -245,22 +253,18 @@ def handle_slip_photo(message):
                 except ValueError:
                     paid_amount = 0
 
-            # စလစ်ဟောင်း ပြန်သုံးထားခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း
             if ref_no:
                 if ref_no in load_used_refs():
                     bot.reply_to(message, "❌ ဤစလစ် (Ref No) မှာ အသုံးပြုပြီးသား ဖြစ်နေပါသည်။")
                     return
 
-            # ငွေပမာဏ မပြည့်ပါက ငြင်းပယ်ခြင်း
             if paid_amount > 0 and paid_amount < expected_price:
                 bot.reply_to(message, f"❌ ငွေပမာဏ မပြည့်မီပါ။\n• ကျသင့်ငွေ: {expected_price:,} ကျပ်\n• စလစ်ပါငွေ: {paid_amount:,} ကျပ်")
                 return
 
-            # Ref No ကို Save ထားခြင်း
             if ref_no:
                 save_ref(ref_no)
 
-            # 3. Admin ထံ User Profile Name + စလစ်ပုံ ပို့ပေးခြင်း
             admin_msg = (
                 f"🟢 **ငွေလွှဲစလစ် အတည်ပြုပြီးပါပြီ!**\n\n"
                 f"👤 **ဝယ်ယူသူ:** {full_name}\n"
@@ -272,7 +276,6 @@ def handle_slip_photo(message):
             )
             bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_msg, parse_mode="Markdown")
 
-            # 4. User ကို အလိုအလျောက် အသံပြောင်းခွင့် ပွင့်ပေးခြင်း (Auto Approval)
             state['step'] = 'wait_audio_input'
             thank_you_msg = (
                 "🎉 **ငွေပေးချေမှု အလိုအလျောက် အတည်ပြုပြီးပါပြီ!**\n\n"
