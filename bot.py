@@ -8,7 +8,7 @@ from gradio_client import Client, handle_file
 
 # --- Bot Token နှင့် API Keys ---
 BOT_TOKEN = "8832097622:AAGDRdS2MnUF9fIr_nObk7k_o-MrWxsCLzI"
-GEMINI_API_KEY = "AQ.Ab8RN6KLWv7yaQbATbuEAiaFa-KFOX52kWov4X4N_nhxsclZQg"
+GEMINI_API_KEY = "AQ.Ab8RN6L4ZGR223Ki7JA9i2nmcpeStJk3I_QisYjgMwSo1z7Ihw"
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -197,6 +197,11 @@ def handle_slip_photo(message):
     state = user_states[user_id]
     expected_price = state['price']
 
+    # User Profile အချက်အလက်များ ထုတ်ယူခြင်း
+    user_info = message.from_user
+    full_name = f"{user_info.first_name or ''} {user_info.last_name or ''}".strip()
+    username = f"@{user_info.username}" if user_info.username else "မရှိပါ"
+
     try:
         bot.reply_to(message, "စလစ်ပုံကို AI ဖြင့် စစ်ဆေးနေပါသည်။ ခဏ စောင့်ပေးပါ...")
         file_info = bot.get_file(message.photo[-1].file_id)
@@ -204,41 +209,72 @@ def handle_slip_photo(message):
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        # Gemini သို့ ငွေပမာဏ ပါ တိတိကျကျ စစ်ဆေးခိုင်းသည့် Prompt
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
-            "ပုံထဲမှ လုပ်ဆောင်မှုအမှတ် (Transaction ID / Ref No)၊ လက်ခံသူ၊ ငွေပမာဏ နှင့် ရက်စွဲ တို့ကို စစ်ဆေးပေးပါ။ "
-            "ကျေးဇူးပြု၍ စာကြောင်းအစမှာ 'REF_NO: [နံပါတ်]' လို့ တိတိကျကျ ရေးပေးပါ။"
+            "ပုံထဲမှ အချက်အလက်များကို စစ်ဆေးပြီး အောက်ပါအတိုင်း သီးသန့် အကြောင်းပြန်ပေးပါ။\n"
+            "REF_NO: [Transaction ID / Ref နံပါတ်]\n"
+            "AMOUNT: [လွှဲထားသော ငွေပမာဏ ဂဏန်းသီးသန့် (ဥပမာ 5000)]\n"
+            "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
         payload = {"contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "image/jpeg", "data": base64_image}}]}]}
 
         response = requests.post(url, json=payload, timeout=30)
         res_data = response.json()
 
+        if "error" in res_data:
+            err_msg = res_data["error"].get("message", "Unknown Error")
+            bot.reply_to(message, f"❌ Google Gemini API Error: {err_msg}")
+            return
+
         if "candidates" in res_data and len(res_data["candidates"]) > 0:
             reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
             
-            match_ref = re.search(r'(?:REF_NO|Transaction ID|လုပ်ဆောင်မှုအမှတ်)[:\s]*([A-Za-z0-9]+)', reply_text, re.IGNORECASE)
-            ref_no = None
+            # 1. Ref No စစ်ဆေးခြင်း
+            match_ref = re.search(r'REF_NO[:\s]*([A-Za-z0-9]+)', reply_text, re.IGNORECASE)
+            ref_no = match_ref.group(1).strip() if match_ref else None
 
-            if match_ref:
-                ref_no = match_ref.group(1).strip()
-            else:
-                digits = re.findall(r'\b\d{10,20}\b', reply_text)
-                if digits:
-                    ref_no = digits[0]
+            # 2. ငွေပမာဏ (Amount) စစ်ဆေးခြင်း
+            match_amount = re.search(r'AMOUNT[:\s]*([0-9,]+)', reply_text, re.IGNORECASE)
+            paid_amount = 0
+            if match_amount:
+                try:
+                    paid_amount = int(match_amount.group(1).replace(',', ''))
+                except ValueError:
+                    paid_amount = 0
 
+            # စလစ်ဟောင်း ပြန်သုံးထားခြင်း ရှိ/မရှိ စစ်ဆေးခြင်း
             if ref_no:
                 if ref_no in load_used_refs():
-                    bot.reply_to(message, "❌ ဤစလစ်မှာ အသုံးပြုပြီးသား ဖြစ်နေပါသည်။")
+                    bot.reply_to(message, "❌ ဤစလစ် (Ref No) မှာ အသုံးပြုပြီးသား ဖြစ်နေပါသည်။")
                     return
+
+            # ငွေပမာဏ မပြည့်ပါက ငြင်းပယ်ခြင်း
+            if paid_amount > 0 and paid_amount < expected_price:
+                bot.reply_to(message, f"❌ ငွေပမာဏ မပြည့်မီပါ။\n• ကျသင့်ငွေ: {expected_price:,} ကျပ်\n• စလစ်ပါငွေ: {paid_amount:,} ကျပ်")
+                return
+
+            # Ref No ကို Save ထားခြင်း
+            if ref_no:
                 save_ref(ref_no)
 
-            admin_msg = f"🟢 ငွေဝင်ရောက်မှု ({state['pack_desc']} - {expected_price:,} ကျပ်)\n\n{reply_text}"
-            bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_msg)
+            # 3. Admin ထံ User Profile Name + စလစ်ပုံ ပို့ပေးခြင်း
+            admin_msg = (
+                f"🟢 **ငွေလွှဲစလစ် အတည်ပြုပြီးပါပြီ!**\n\n"
+                f"👤 **ဝယ်ယူသူ:** {full_name}\n"
+                f"🔗 **Username:** {username}\n"
+                f"🆔 **User ID:** `{user_id}`\n"
+                f"📦 **Package:** `{state['pack_desc']}`\n"
+                f"💰 **ကျသင့်ငွေ:** `{expected_price:,} ကျပ်`\n\n"
+                f"📝 **Gemini ဖတ်ပေးချက်:**\n{reply_text}"
+            )
+            bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_msg, parse_mode="Markdown")
 
+            # 4. User ကို အလိုအလျောက် အသံပြောင်းခွင့် ပွင့်ပေးခြင်း (Auto Approval)
             state['step'] = 'wait_audio_input'
             thank_you_msg = (
-                "🎉 **ငွေပေးချေမှု အောင်မြင်ပါသည်!**\n\n"
+                "🎉 **ငွေပေးချေမှု အလိုအလျောက် အတည်ပြုပြီးပါပြီ!**\n\n"
                 "ကျွန်ုပ်တို့၏ AI Voice Changer ဝန်ဆောင်မှုကို ယုံကြည်စွာ ဝယ်ယူအားပေးသည့်အတွက် အထူးပင် ကျေးဇူးတင်ရှိပါသည်။\n\n"
                 "🎙️ ယခု **အသံပြောင်းလိုသော အသံဖိုင် (Voice Note သို့မဟုတ် Audio)** ကို စတင်ပို့ပေးလို့ ရပါပြီခင်ဗျာ။"
             )
