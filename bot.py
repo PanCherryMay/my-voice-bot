@@ -8,7 +8,7 @@ import threading
 import io
 import time
 import PIL.Image
-import google.generativeai as genai
+from google import genai # SDK အသစ်သို့ ပြောင်းလဲထားပါသည်
 from telebot import types
 from gradio_client import Client, handle_file
 
@@ -28,9 +28,8 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
 GEMINI_API_KEY = "AQ.Ab8RN6LzOMwRQjjtkv-Xm1ssi1E6eLQy8lm6pzppLckBG-0emw"
 
-# --- Gemini AI Configuration ---
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+# --- Gemini AI Configuration (Client အသစ်ဖြင့် ချိန်ညှိထားပါသည်) ---
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -237,7 +236,11 @@ def handle_slip_photo(message):
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
 
-        response = model.generate_content([prompt_text, image])
+        # SDK အသစ်ဖြင့် API Call ခေါ်ယူထားပါသည်
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[prompt_text, image]
+        )
         reply_text = response.text
 
         if reply_text:
@@ -304,9 +307,9 @@ def handle_audio_input(message):
         with open(input_audio_path, 'wb') as f:
             f.write(downloaded_file)
 
-        client = Client(HF_SPACE_NAME, hf_token=HF_TOKEN)
+        client_hf = Client(HF_SPACE_NAME, hf_token=HF_TOKEN)
         
-        result = client.predict(
+        result = client_hf.predict(
             audio=handle_file(input_audio_path),
             api_name="/predict" 
         )
