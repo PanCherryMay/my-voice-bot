@@ -21,7 +21,7 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- Bot Token နှင့် API Keys (Token အသစ် ထည့်သွင်းပြီး) ---
+# --- Bot Token နှင့် API Keys ---
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
 GEMINI_API_KEY = "AQ.Ab8RN6ILlFGZM_OZUpUxYYWNdBcLR6enXSzH5mlw0NgfGqDNBg"
 
@@ -335,4 +335,4 @@ if __name__ == '__main__':
         bot.remove_webhook()
     except Exception:
         pass
-    bot.infinity_polling(skip_pending_updates=True)
+    bot.infinity_polling()
