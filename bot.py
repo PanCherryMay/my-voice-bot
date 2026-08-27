@@ -21,9 +21,9 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- Bot Token နှင့် API Keys ---
+# --- Bot Token နှင့် Gemini API Key ---
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
-GEMINI_API_KEY = "AQ.Ab8RN6ILlFGZM_OZUpUxYYWNdBcLR6enXSzH5mlw0NgfGqDNBg"
+GEMINI_API_KEY = "AQ.Ab8RN6LzOMwRQjjtkv-Xm1ssi1E6eLQy8lm6pzppLckBG-0emw"
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -222,8 +222,13 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
+        # AQ. Key အတွက် Header တွင် Auth ခေါ်ဆိုခြင်း
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+            "Authorization": f"Bearer {GEMINI_API_KEY}"
+        }
         
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
