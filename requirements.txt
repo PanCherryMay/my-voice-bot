@@ -1,5 +1,5 @@
-pyTelegramBotAPI
+PyTelegramBotAPI
 requests
 gradio_client
-google-generativeai
+google-genai
 Pillow
