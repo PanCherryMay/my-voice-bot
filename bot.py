@@ -2,10 +2,12 @@ import telebot
 import requests
 import os
 import re
-import base64
 import http.server
 import socketserver
 import threading
+import io
+import PIL.Image
+import google.generativeai as genai
 from telebot import types
 from gradio_client import Client, handle_file
 
@@ -24,6 +26,10 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 # --- Bot Token နှင့် Gemini API Key ---
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
 GEMINI_API_KEY = "AQ.Ab8RN6LzOMwRQjjtkv-Xm1ssi1E6eLQy8lm6pzppLckBG-0emw"
+
+# --- Gemini AI Configuration ---
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -218,18 +224,12 @@ def handle_slip_photo(message):
 
     try:
         bot.reply_to(message, "စလစ်ပုံကို AI ဖြင့် စစ်ဆေးနေပါသည်။ ခဏ စောင့်ပေးပါ...")
+        
+        # Telegram ထဲမှ ပုံကို ဒေါင်းလုဒ်လုပ်ပြီး PIL Image အဖြစ် ပြောင်းလဲခြင်း
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        base64_image = base64.b64encode(downloaded_file).decode('utf-8')
+        image = PIL.Image.open(io.BytesIO(downloaded_file))
 
-        # AQ. Key အတွက် Header တွင် Auth ခေါ်ဆိုခြင်း
-        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": GEMINI_API_KEY,
-            "Authorization": f"Bearer {GEMINI_API_KEY}"
-        }
-        
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
             "ပုံထဲမှ အချက်အလက်များကို စစ်ဆေးပြီး အောက်ပါအတိုင်း သီးသန့် အကြောင်းပြန်ပေးပါ။\n"
@@ -237,19 +237,12 @@ def handle_slip_photo(message):
             "AMOUNT: [လွှဲထားသော ငွေပမာဏ ဂဏန်းသီးသန့် (ဥပမာ 5000)]\n"
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
-        payload = {"contents": [{"parts": [{"text": prompt_text}, {"inline_data": {"mime_type": "image/jpeg", "data": base64_image}}]}]}
 
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        res_data = response.json()
+        # Official Google Gemini SDK ဖြင့် Process လုပ်ခြင်း
+        response = model.generate_content([prompt_text, image])
+        reply_text = response.text
 
-        if "error" in res_data:
-            err_msg = res_data["error"].get("message", "Unknown Error")
-            bot.reply_to(message, f"❌ Google Gemini API Error: {err_msg}")
-            return
-
-        if "candidates" in res_data and len(res_data["candidates"]) > 0:
-            reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            
+        if reply_text:
             match_ref = re.search(r'REF_NO[:\s]*([A-Za-z0-9]+)', reply_text, re.IGNORECASE)
             ref_no = match_ref.group(1).strip() if match_ref else None
 
@@ -261,10 +254,9 @@ def handle_slip_photo(message):
                 except ValueError:
                     paid_amount = 0
 
-            if ref_no:
-                if ref_no in load_used_refs():
-                    bot.reply_to(message, "❌ ဤစလစ် (Ref No) မှာ အသုံးပြုပြီးသား ဖြစ်နေပါသည်။")
-                    return
+            if ref_no and ref_no in load_used_refs():
+                bot.reply_to(message, "❌ ဤစလစ် (Ref No) မှာ အသုံးပြုပြီးသား ဖြစ်နေပါသည်။")
+                return
 
             if paid_amount > 0 and paid_amount < expected_price:
                 bot.reply_to(message, f"❌ ငွေပမာဏ မပြည့်မီပါ။\n• ကျသင့်ငွေ: {expected_price:,} ကျပ်\n• စလစ်ပါငွေ: {paid_amount:,} ကျပ်")
@@ -295,7 +287,7 @@ def handle_slip_photo(message):
             bot.reply_to(message, "❌ စလစ်ပုံထဲတွင် အချက်အလက်များ ရှာမတွေ့ပါ။ ငွေလွှဲစလစ်ပုံ အမှန်ကို ပို့ပေးပါခင်ဗျာ။")
 
     except Exception as e:
-        bot.reply_to(message, f"Error: {str(e)}")
+        bot.reply_to(message, f"❌ Google Gemini API Error: {str(e)}")
 
 @bot.message_handler(content_types=['voice', 'audio'])
 def handle_audio_input(message):
