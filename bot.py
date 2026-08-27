@@ -5,17 +5,16 @@ import re
 import http.server
 import socketserver
 import threading
-import io
 import time
 import base64
-import PIL.Image
 from telebot import types
 from gradio_client import Client, handle_file
 
-# --- Render Web Service အတွက် Port အတု ဖွင့်ပေးသည့် Server ---
+# --- Render Port Server (Socket Reuse ပြင်ထားသည်) ---
 def run_dummy_server():
     port = int(os.environ.get("PORT", 10000))
     handler = http.server.SimpleHTTPRequestHandler
+    socketserver.TCPServer.allow_reuse_address = True
     try:
         with socketserver.TCPServer(("", port), handler) as httpd:
             httpd.serve_forever()
@@ -24,19 +23,13 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- Bot Token နှင့် Gemini API Key ---
-BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
-GEMINI_API_KEY = "AQ.Ab8RN6JJWg5nQZ6KCNgJGwO1prgGfWqQcyPQ3r34qC5eA84LAw"
-
-# --- Hugging Face RVC Space အချက်အလက်များ ---
+# --- Environment Variables / Safe Credentials ---
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6JJWg5nQZ6KCNgJGwO1prgGfWqQcyPQ3r34qC5eA84LAw")
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
-HF_TOKEN = "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"
+HF_TOKEN = os.environ.get("HF_TOKEN", "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")
 
-# --- ငွေလက်ခံမည့် အချက်အလက်များ ---
-ALLOWED_NAME = "YeMinPhyo"
-ALLOWED_PHONES = ["09759798544", "09773826118", "98544", "26118"]
 ADMIN_CHAT_ID = 8640614876
-
 CHAR_LIST = [1000, 2000, 4000, 5000, 8000, 10000, 20000, 40000, 50000, 80000, 100000]
 
 PLANS = {
@@ -165,7 +158,7 @@ def show_sub_buttons(call):
         markup.add(types.InlineKeyboardButton(btn_text, callback_data=f"buys_{p_key}_{sub_key}"))
 
     markup.add(types.InlineKeyboardButton("⬅️ နောက်သို့ ပြန်သွားရန်", callback_data=f"plan_{p_key}"))
-    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=menu_text, reply_markup=markup, parse_mode="Markdown")
+    bot.edit_message_text(chat_id=user_id, message_id=call.message.message_id, text=menu_text, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_main")
 def back_to_main(call):
@@ -223,7 +216,6 @@ def handle_slip_photo(message):
         
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
         prompt_text = (
@@ -234,16 +226,8 @@ def handle_slip_photo(message):
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
 
-        # API Key ပုံစံအလိုက် Request ပြင်ဆင်ခြင်း (Error ကင်းစေရန်)
-        if GEMINI_API_KEY.startswith("AIza"):
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-            headers = {'Content-Type': 'application/json'}
-        else:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {GEMINI_API_KEY}'
-            }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        headers = {'Content-Type': 'application/json'}
 
         payload = {
             "contents": [{
@@ -325,9 +309,7 @@ def handle_audio_input(message):
     if user_id not in user_states or user_states[user_id].get('step') != 'wait_audio_input':
         return
 
-    state = user_states[user_id]
     bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံပြောင်းလဲနေပါသည် ခဏစောင့်ပါ...")
-
     input_audio_path = f"input_{user_id}.wav"
     try:
         file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
@@ -338,9 +320,10 @@ def handle_audio_input(message):
 
         client_hf = Client(HF_SPACE_NAME, hf_token=HF_TOKEN)
         
+        # Space API structure ဖြင့် ချိန်ညှိရန်
         result = client_hf.predict(
-            audio=handle_file(input_audio_path),
-            api_name="/predict" 
+            handle_file(input_audio_path),
+            api_name="/predict"
         )
 
         output_audio_path = result if isinstance(result, str) else result[0]
