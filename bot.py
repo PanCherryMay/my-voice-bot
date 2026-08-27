@@ -26,7 +26,7 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # --- Bot Token နှင့် Gemini API Key ---
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
-GEMINI_API_KEY = "AQ.Ab8RN6LzOMwRQjjtkv-Xm1ssi1E6eLQy8lm6pzppLckBG-0emw"
+GEMINI_API_KEY = "AQ.Ab8RN6JJWg5nQZ6KCNgJGwO1prgGfWqQcyPQ3r34qC5eA84LAw"
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -224,7 +224,6 @@ def handle_slip_photo(message):
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
 
-        # ပုံကို Base64 သို့ ပြောင်းလဲခြင်း
         base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
         prompt_text = (
@@ -235,9 +234,17 @@ def handle_slip_photo(message):
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
 
-        # Gemini REST API သို့ တိုက်ရိုက် ခေါ်ယူခြင်း (AQ. Key Bug များကို 100% ရှင်းထုတ်ထားပါသည်)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        headers = {'Content-Type': 'application/json'}
+        # API Key ပုံစံအလိုက် Request ပြင်ဆင်ခြင်း (Error ကင်းစေရန်)
+        if GEMINI_API_KEY.startswith("AIza"):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+            headers = {'Content-Type': 'application/json'}
+        else:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+            headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {GEMINI_API_KEY}'
+            }
+
         payload = {
             "contents": [{
                 "parts": [
