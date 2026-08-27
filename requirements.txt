@@ -1,4 +1,3 @@
 PyTelegramBotAPI
 requests
 gradio_client
-Pillow
