@@ -95,7 +95,6 @@ def save_ref(ref_no):
     with open(REF_FILE, "a") as f:
         f.write(f"{ref_no}\n")
 
-# --- Admin များအတွက် စလစ်မလိုဘဲ တန်းစမ်းရန် Command ---
 @bot.message_handler(commands=['test'])
 def test_mode(message):
     user_id = message.chat.id
@@ -225,7 +224,6 @@ def handle_slip_photo(message):
     try:
         bot.reply_to(message, "စလစ်ပုံကို AI ဖြင့် စစ်ဆေးနေပါသည်။ ခဏ စောင့်ပေးပါ...")
         
-        # Telegram ထဲမှ ပုံကို ဒေါင်းလုဒ်လုပ်ပြီး PIL Image အဖြစ် ပြောင်းလဲခြင်း
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image = PIL.Image.open(io.BytesIO(downloaded_file))
@@ -238,7 +236,6 @@ def handle_slip_photo(message):
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
 
-        # Official Google Gemini SDK ဖြင့် Process လုပ်ခြင်း
         response = model.generate_content([prompt_text, image])
         reply_text = response.text
 
