@@ -7,8 +7,8 @@ import socketserver
 import threading
 import io
 import time
+import base64
 import PIL.Image
-from google import genai # SDK အသစ်သို့ ပြောင်းလဲထားပါသည်
 from telebot import types
 from gradio_client import Client, handle_file
 
@@ -27,9 +27,6 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 # --- Bot Token နှင့် Gemini API Key ---
 BOT_TOKEN = "8880996890:AAHa3LI10F3l7MITylg7AYB38LGq4V3t8G0"
 GEMINI_API_KEY = "AQ.Ab8RN6LzOMwRQjjtkv-Xm1ssi1E6eLQy8lm6pzppLckBG-0emw"
-
-# --- Gemini AI Configuration (Client အသစ်ဖြင့် ချိန်ညှိထားပါသည်) ---
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "RVC-Boss/GPT-SoVITS" 
@@ -226,7 +223,9 @@ def handle_slip_photo(message):
         
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image = PIL.Image.open(io.BytesIO(downloaded_file))
+
+        # ပုံကို Base64 သို့ ပြောင်းလဲခြင်း
+        base64_image = base64.b64encode(downloaded_file).decode('utf-8')
 
         prompt_text = (
             "ဒီပုံက မြန်မာနိုင်ငံက ငွေလွှဲစလစ် (KBZPay, KPay, WavePay စသည်) ဖြစ်ပါတယ်။ "
@@ -236,12 +235,35 @@ def handle_slip_photo(message):
             "RECEIVER: [လက်ခံသူ အမည် သို့မဟုတ် ဖုန်းနံပါတ်]"
         )
 
-        # SDK အသစ်ဖြင့် API Call ခေါ်ယူထားပါသည်
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=[prompt_text, image]
-        )
-        reply_text = response.text
+        # Gemini REST API သို့ တိုက်ရိုက် ခေါ်ယူခြင်း (AQ. Key Bug များကို 100% ရှင်းထုတ်ထားပါသည်)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": prompt_text},
+                    {
+                        "inline_data": {
+                            "mime_type": "image/jpeg",
+                            "data": base64_image
+                        }
+                    }
+                ]
+            }]
+        }
+
+        res = requests.post(url, headers=headers, json=payload, timeout=30)
+        res_data = res.json()
+
+        if "error" in res_data:
+            bot.reply_to(message, f"❌ Google Gemini API Error: {res_data['error'].get('message', res_data['error'])}")
+            return
+
+        reply_text = ""
+        if "candidates" in res_data and len(res_data["candidates"]) > 0:
+            parts = res_data["candidates"][0].get("content", {}).get("parts", [])
+            if parts:
+                reply_text = parts[0].get("text", "")
 
         if reply_text:
             match_ref = re.search(r'REF_NO[:\s]*([A-Za-z0-9]+)', reply_text, re.IGNORECASE)
@@ -288,7 +310,7 @@ def handle_slip_photo(message):
             bot.reply_to(message, "❌ စလစ်ပုံထဲတွင် အချက်အလက်များ ရှာမတွေ့ပါ။ ငွေလွှဲစလစ်ပုံ အမှန်ကို ပို့ပေးပါခင်ဗျာ။")
 
     except Exception as e:
-        bot.reply_to(message, f"❌ Google Gemini API Error: {str(e)}")
+        bot.reply_to(message, f"❌ API Error: {str(e)}")
 
 @bot.message_handler(content_types=['voice', 'audio'])
 def handle_audio_input(message):
