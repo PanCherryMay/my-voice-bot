@@ -1,0 +1,4 @@
+Flask
+TeleBot
+requests
+gradio_client
