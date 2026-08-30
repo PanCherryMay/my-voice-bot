@@ -1,3 +1,0 @@
-PyTelegramBotAPI
-requests
-gradio_client
