@@ -22,7 +22,6 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- Hugging Face RVC Space အချက်အလက်များ ---
 HF_SPACE_NAME = "r3gm/rvc_zero"
-HF_TOKEN = ""
 
 # --- ငွေလက်ခံမည့် အချက်အလက်များ ---
 ALLOWED_NAME = "YeMinPhyo"
@@ -32,11 +31,6 @@ ADMIN_CHAT_ID = 8640614876
 REF_FILE = "used_refs.txt"
 USER_DATA_FILE = "users_data.json"
 user_states = {}
-
-CHAR_LIST = [
-    1000, 2000, 4000, 5000, 8000, 10000,
-    20000, 40000, 50000, 80000, 100000,
-]
 
 PLANS = {
     "rvc": {
@@ -355,35 +349,30 @@ def handle_slip_photo(message):
                 amount_str = match_amount.group(1).replace(",", "").replace("-", "").strip() if match_amount else "0"
                 amount_val = int(amount_str) if amount_str.isdigit() else 0
 
-                # 1. စလစ်မှန်ကန်မှု စစ်ဆေးခြင်း
                 if ref_val == "N/A" or receiver_val == "N/A" or amount_val == 0:
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("🔄 ပင်မမီနူးသို့ ပြန်သွားရန်", callback_data="back_to_main"))
                     bot.reply_to(message, "❌ **ငွေပေးချေမှု မအောင်မြင်ပါ!** ပေးပို့လာသော ပုံသည် မှန်ကန်သည့် ငွေလွှဲပြေစာ မဟုတ်ပါ။", reply_markup=markup)
                     return
 
-                # 2. လက်ခံသူအမည် စစ်ဆေးခြင်း
                 if ALLOWED_NAME.lower() not in receiver_val.lower():
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("🔄 ပင်မမီနူးသို့ ပြန်သွားရန်", callback_data="back_to_main"))
                     bot.reply_to(message, f"❌ **ငွေပေးချေမှု မအောင်မြင်ပါ!** လက်ခံသူအမည် (`{receiver_val}`) မမှန်ကန်ပါ။", reply_markup=markup)
                     return
 
-                # 3. ငွေပမာဏ စစ်ဆေးခြင်း
                 if amount_val != expected_price:
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("🔄 ပင်မမီနူးသို့ ပြန်သွားရန်", callback_data="back_to_main"))
                     bot.reply_to(message, f"❌ **ငွေပေးချေမှု မအောင်မြင်ပါ!** ငွေပမာဏ (`{amount_val:,} ကျပ်`) လွဲမှားနေပါသည်။", reply_markup=markup)
                     return
 
-                # 4. စလစ်အဟောင်း ဟုတ်မဟုတ် စစ်ဆေးခြင်း
                 if ref_val in load_used_refs():
                     bot.reply_to(message, "❌ ဤစလစ်မှာ အသုံးပြုပြီးသား (စလစ်အဟောင်း) ဖြစ်နေပါသည်။")
                     return
 
                 save_ref(ref_val)
 
-                # --- သုံးစွဲသူ အချက်အလက်များကို JSON ဖိုင်ထဲသို့ သိမ်းဆည်းခြင်း ---
                 users = load_users()
                 str_user_id = str(user_id)
                 if str_user_id not in users:
@@ -399,7 +388,6 @@ def handle_slip_photo(message):
                     "ref": ref_val
                 })
                 save_users(users)
-                # -------------------------------------------------------------
 
                 admin_msg = f"🟢 ငွေဝင်ရောက်မှု ({state['pack_desc']} - {expected_price:,} ကျပ်)\n\n{reply_text}"
                 bot.send_photo(ADMIN_CHAT_ID, message.photo[-1].file_id, caption=admin_msg)
@@ -442,7 +430,7 @@ def handle_target_audio(message):
         bot.reply_to(message, f"❌ Target အသံဖိုင် သိမ်းဆည်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
 
-# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (ပြင်ဆင်ပြီး) ---
+# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (အမှားပြင်ဆင်ပြီး) ---
 @bot.message_handler(content_types=["voice", "audio"])
 def handle_source_audio(message):
     user_id = message.chat.id
@@ -453,7 +441,7 @@ def handle_source_audio(message):
         bot.reply_to(message, "❌ ကျေးဇူးပြု၍ ပထမဦးစွာ /start နှိပ်၍ Step (1) Target Voice အသံဖိုင်ကို အရင် ပို့ပေးပါဦး။")
         return
 
-    bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံနှစ်ခုကို ချိတ်ဆက်ကာ အသံပြောင်းလဲနေသည် ခဏစောင့်ပါ...")
+    status_msg = bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံနှစ်ခုကို ချိတ်ဆက်ကာ အသံပြောင်းလဲနေသည် ခဏစောင့်ပါ...")
 
     source_audio_path = f"source_{user_id}.wav"
     try:
@@ -466,7 +454,7 @@ def handle_source_audio(message):
         client = Client(HF_SPACE_NAME)
 
         prediction = None
-        # Hugging Face Space ချိတ်ဆက်ခြင်း (fn_index စနစ်ဖြင့် ချိတ်ဆက်မည်)
+        # Hugging Face Space ချိတ်ဆက်ခြင်းနှင့် ရလဒ်ယူခြင်း
         try:
             prediction = client.predict(
                 handle_file(target_audio_path),
@@ -480,39 +468,40 @@ def handle_source_audio(message):
                 0.33,     # protect
                 fn_index=0
             )
-        except Exception:
+        except Exception as e_first:
+            # Fallback handling
             try:
-                prediction = client.predict(
-                    handle_file(target_audio_path),
-                    handle_file(source_audio_path),
-                    0, "pm", 0.6, 3, 0, 0.25, 0.33,
-                    fn_index=1
-                )
-            except Exception:
                 prediction = client.predict(
                     handle_file(target_audio_path),
                     handle_file(source_audio_path),
                     fn_index=0
                 )
+            except Exception as e_second:
+                raise Exception("Hugging Face Server Busy ဖြစ်နေပါသဖြင့် ရလဒ်မထွက်ပါ။ ခဏစောင့်ပြီး ပြန်လည်စမ်းသပ်ပေးပါ။")
 
-        if isinstance(prediction, (list, tuple)):
-            output_audio_path = prediction[0] if len(prediction) > 0 else None
-        elif isinstance(prediction, dict):
-            output_audio_path = list(prediction.values())[0] if prediction else None
-        else:
-            output_audio_path = str(prediction)
+        # Result Parsing ဖြင့် Exception မတက်အောင် စစ်ဆေးခြင်း
+        output_audio_path = None
+
+        if isinstance(prediction, (list, tuple)) and len(prediction) > 0:
+            output_audio_path = prediction[0]
+        elif isinstance(prediction, dict) and len(prediction) > 0:
+            output_audio_path = list(prediction.values())[0]
+        elif isinstance(prediction, str) and prediction.strip():
+            output_audio_path = prediction
 
         if not output_audio_path or not os.path.exists(str(output_audio_path)):
-            raise Exception("AI Space မှ အသံဖိုင် ထွက်မလာပါ")
+            raise Exception("AI Space မှ အသံဖိုင် ရလဒ် ထွက်မလာပါ သို့မဟုတ် Server တန့်သွားပါသည်။")
 
         with open(output_audio_path, "rb") as converted_audio:
             bot.send_voice(user_id, converted_audio, caption="✅ **Custom Target Voice ဖြင့် အသံပြောင်းပြီးပါပြီ**")
 
+    except IndexError:
+        bot.reply_to(message, "❌ **အသံပြောင်းရာတွင် အမှားဖြစ်သွားပါသည်။**\n(Hugging Face Space မှ GPU Server Busy ဖြစ်နေပါသဖြင့် ရလဒ် မထုတ်ပေးနိုင်ပါ။ မိနစ်အနည်းငယ်စောင့်ပြီး ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။)")
     except Exception as e:
         bot.reply_to(message, f"❌ အသံပြောင်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
     finally:
-        # ယာယီသိမ်းထားသော Audio ဖိုင်များကို ပြန်လည်ဖျက်ဆီးခြင်း
+        # ယာယီသိမ်းထားသော Audio ဖိုင်များကို ဖျက်ဆီးခြင်း
         for p in [target_audio_path, source_audio_path]:
             if p and os.path.exists(p):
                 try:
@@ -528,11 +517,9 @@ def run_bot():
     bot.infinity_polling()
 
 if __name__ == "__main__":
-    # Telegram Bot အတွက် Thread သီးသန့်စတင်ခြင်း
     bot_thread = threading.Thread(target=run_bot)
     bot_thread.daemon = True
     bot_thread.start()
 
-    # Render ပေးမည့် Port နဲ့ Flask Server ကို Run ခြင်း
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
