@@ -1,51 +1,28 @@
- import os
+import os
 import re
 import time
 import base64
 import json
 import requests
-from flask import Flask, request
+import threading
+from flask import Flask
 from telebot import types
 import telebot
 from gradio_client import Client, handle_file
 
-# --- Render Flask Web Server ---
+# --- Render မှာ မအိပ်အောင် Flask Web Server တည်ဆောက်ခြင်း ---
 app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🤖 Bot is active and running 24/7!"
 
 # --- Bot Token နှင့် API Keys (Environment Variables မှ ယူမည်) ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-RENDER_URL = "https://ai-voice-services-bot.onrender.com"
 
-# --- Hugging Face RVC Space ---
-HF_SPACE_NAME = "r3gm/rvc_zero"
-
-# --- TeleBot Multi-thread စနစ်ဖြင့် စတင်ခြင်း ---
-bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
-
-# --- Webhook Endpoint (Telegram မှ Message များကို လက်ခံမည့်နေရာ) ---
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    if request.headers.get("content-type") == "application/json":
-        json_string = request.get_data().decode("utf-8")
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "OK", 200
-    return "Forbidden", 403
-
-@app.route("/")
-def home():
-    return "🤖 Bot Webhook is Active & Running 24/7!", 200
-
-# --- Webhook အလိုအလျောက် ချိတ်ဆက်ခြင်း ---
-try:
-    bot.remove_webhook()
-    time.sleep(1)
-    bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
-    print(f"✅ Webhook set successfully to {RENDER_URL}/{BOT_TOKEN}")
-except Exception as e:
-    print(f"❌ Webhook setup error: {e}")
-
+# --- Hugging Face RVC Space အချက်အလက်များ (အဆင်ပြေသော Space အသစ်သို့ လဲလှယ်ထားပါသည်) ---
+HF_SPACE_NAME = "aiprompting/RVC-Voice-Conversion"
 
 # --- ငွေလက်ခံမည့် အချက်အလက်များ ---
 ALLOWED_NAME = "YeMinPhyo"
@@ -95,6 +72,8 @@ PLANS = {
     },
 }
 
+bot = telebot.TeleBot(BOT_TOKEN)
+
 # --- ဒေတာဖတ်ရန်/သိမ်းရန် ဖန်ရှင်များ ---
 def load_used_refs():
     if os.path.exists(REF_FILE):
@@ -120,7 +99,7 @@ def save_users(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 
-# --- Admin Command ---
+# --- Admin Command: သုံးစွဲသူများစာရင်း ကြည့်ရန် ---
 @bot.message_handler(commands=["users"])
 def view_all_users(message):
     if message.chat.id != ADMIN_CHAT_ID:
@@ -259,7 +238,7 @@ def handle_package_selection(call):
         desc = f"{PLANS[p_key]['name']} - {sub_info['title']} ({sub_info['chars']} လုံး)"
         price = sub_info["price"]
 
-    # --- ADMIN FREE BYPASS ---
+    # --- 👑 ADMIN FREE BYPASS (စလစ်မလိုဘဲ တိုက်ရိုက်သုံးရန်) ---
     if user_id == ADMIN_CHAT_ID:
         user_states[user_id] = {
             "step": "wait_target_audio",
@@ -284,6 +263,7 @@ def handle_package_selection(call):
             text=admin_free_msg, reply_markup=markup, parse_mode="Markdown"
         )
         return
+    # --------------------------------------------------------
 
     user_states[user_id] = {
         "step": "wait_slip",
@@ -472,6 +452,7 @@ def handle_source_audio(message):
         with open(source_audio_path, "wb") as f:
             f.write(downloaded_file)
 
+        # Auto-Retry 3 ကြိမ် ပြုလုပ်မည့် Loop
         max_retries = 3
         prediction = None
         last_error = ""
@@ -496,7 +477,7 @@ def handle_source_audio(message):
             except Exception as ex:
                 last_error = str(ex)
                 if attempt < max_retries - 1:
-                    time.sleep(5)
+                    time.sleep(5)  # 5 စက္ကန့် စောင့်ပြီး ထပ်စမ်းမည်
 
         output_audio_path = None
         if isinstance(prediction, (list, tuple)) and len(prediction) > 0:
@@ -525,7 +506,19 @@ def handle_source_audio(message):
         user_states.pop(user_id, None)
 
 
-# --- Render Server Start ---
+# --- Bot ကို Thread နဲ့ Run ပြီး Polling Conflict မဖြစ်အောင် ပြင်ဆင်ခြင်း ---
+def run_bot():
+    print("Telegram Bot is running...")
+    try:
+        bot.remove_webhook()
+    except Exception:
+        pass
+    bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
+
 if __name__ == "__main__":
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
