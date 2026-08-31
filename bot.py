@@ -20,9 +20,13 @@ def home():
 # --- Bot Token နှင့် API Keys (Environment Variables မှ ယူမည်) ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+HF_TOKEN = os.environ.get("HF_TOKEN")  # ရှိလျှင် အသုံးပြုရန်
 
-# --- Hugging Face RVC Space အချက်အလက်များ (အဆင်ပြေသော Space အသစ်သို့ လဲလှယ်ထားပါသည်) ---
-HF_SPACE_NAME = "aiprompting/RVC-Voice-Conversion"
+# --- Hugging Face RVC Space များ (တစ်ခု အဆင်မပြေပါက အခြားတစ်ခုသို့ Automatic Fallback လုပ်မည်) ---
+HF_SPACES = [
+    "r3gm/rvc_zero",
+    "Phedro/RVC_Zero"
+]
 
 # --- ငွေလက်ခံမည့် အချက်အလက်များ ---
 ALLOWED_NAME = "YeMinPhyo"
@@ -431,7 +435,7 @@ def handle_target_audio(message):
         bot.reply_to(message, f"❌ Target အသံဖိုင် သိမ်းဆည်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
 
-# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (Auto-Retry ထည့်သွင်းထားသည်) ---
+# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (Multi-Space Fallback စနစ်) ---
 @bot.message_handler(content_types=["voice", "audio"])
 def handle_source_audio(message):
     user_id = message.chat.id
@@ -452,14 +456,13 @@ def handle_source_audio(message):
         with open(source_audio_path, "wb") as f:
             f.write(downloaded_file)
 
-        # Auto-Retry 3 ကြိမ် ပြုလုပ်မည့် Loop
-        max_retries = 3
         prediction = None
         last_error = ""
 
-        for attempt in range(max_retries):
+        # Space အသီးသီးကို အစဉ်လိုက် စမ်းသပ်မည့် Multi-Space Loop
+        for space_name in HF_SPACES:
             try:
-                client = Client(HF_SPACE_NAME)
+                client = Client(space_name, hf_token=HF_TOKEN)
                 prediction = client.predict(
                     handle_file(target_audio_path),
                     handle_file(source_audio_path),
@@ -470,14 +473,12 @@ def handle_source_audio(message):
                     0,        # resample sr
                     0.25,     # rms mix rate
                     0.33,     # protect
-                    fn_index=0
                 )
                 if prediction:
                     break
             except Exception as ex:
                 last_error = str(ex)
-                if attempt < max_retries - 1:
-                    time.sleep(5)  # 5 စက္ကန့် စောင့်ပြီး ထပ်စမ်းမည်
+                time.sleep(2)
 
         output_audio_path = None
         if isinstance(prediction, (list, tuple)) and len(prediction) > 0:
@@ -488,7 +489,7 @@ def handle_source_audio(message):
             output_audio_path = prediction
 
         if not output_audio_path or not os.path.exists(str(output_audio_path)):
-            raise Exception("Hugging Face Server Busy ဖြစ်နေပါသဖြင့် အချိန်မီ ရလဒ်မထွက်လာပါ။ စက္ကန့်အနည်းငယ်အကြာတွင် ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။")
+            raise Exception(f"Hugging Face Server Busy ဖြစ်နေပါသည်။ (အသေးစိတ်: {last_error})")
 
         with open(output_audio_path, "rb") as converted_audio:
             bot.send_voice(user_id, converted_audio, caption="✅ **Custom Target Voice ဖြင့် အသံပြောင်းပြီးပါပြီ**")
