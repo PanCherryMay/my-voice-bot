@@ -20,7 +20,7 @@ def home():
 # --- Bot Token နှင့် API Keys (Environment Variables မှ ယူမည်) ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-HF_TOKEN = os.environ.get("HF_TOKEN")  # ရှိလျှင် အသုံးပြုရန်
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # --- Hugging Face RVC Space များ (တစ်ခု အဆင်မပြေပါက အခြားတစ်ခုသို့ Automatic Fallback လုပ်မည်) ---
 HF_SPACES = [
@@ -435,7 +435,7 @@ def handle_target_audio(message):
         bot.reply_to(message, f"❌ Target အသံဖိုင် သိမ်းဆည်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
 
-# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (Multi-Space Fallback စနစ်) ---
+# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း ---
 @bot.message_handler(content_types=["voice", "audio"])
 def handle_source_audio(message):
     user_id = message.chat.id
@@ -459,10 +459,14 @@ def handle_source_audio(message):
         prediction = None
         last_error = ""
 
-        # Space အသီးသီးကို အစဉ်လိုက် စမ်းသပ်မည့် Multi-Space Loop
         for space_name in HF_SPACES:
             try:
-                client = Client(space_name, hf_token=HF_TOKEN)
+                # token Parameter ကို တိတိကျကျ ပြင်ဆင်ထားပါသည်
+                if HF_TOKEN:
+                    client = Client(space_name, token=HF_TOKEN)
+                else:
+                    client = Client(space_name)
+
                 prediction = client.predict(
                     handle_file(target_audio_path),
                     handle_file(source_audio_path),
