@@ -442,45 +442,58 @@ def handle_target_audio(message):
         bot.reply_to(message, f"❌ Target အသံဖိုင် သိမ်းဆည်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
 
-# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း ---
+# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (ပြင်ဆင်ပြီး) ---
 @bot.message_handler(content_types=["voice", "audio"])
 def handle_source_audio(message):
     user_id = message.chat.id
     state = user_states.get(user_id, {})
     target_audio_path = state.get("target_audio_path")
 
+    if not target_audio_path or not os.path.exists(target_audio_path):
+        bot.reply_to(message, "❌ ကျေးဇူးပြု၍ ပထမဦးစွာ /start နှိပ်၍ Step (1) Target Voice အသံဖိုင်ကို အရင် ပို့ပေးပါဦး။")
+        return
+
     bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံနှစ်ခုကို ချိတ်ဆက်ကာ အသံပြောင်းလဲနေသည် ခဏစောင့်ပါ...")
 
+    source_audio_path = f"source_{user_id}.wav"
     try:
         file_info = bot.get_file(message.voice.file_id if message.voice else message.audio.file_id)
         downloaded_file = bot.download_file(file_info.file_path)
 
-        source_audio_path = f"source_{user_id}.wav"
         with open(source_audio_path, "wb") as f:
             f.write(downloaded_file)
 
         client = Client(HF_SPACE_NAME)
 
-        # Gradio client error မတက်အောင် api_name ကို တစ်ခါတည်း သေချာ ထည့်ပေးထားပါတယ်
+        prediction = None
+        # Hugging Face Space ချိတ်ဆက်ခြင်း (fn_index စနစ်ဖြင့် ချိတ်ဆက်မည်)
         try:
-            prediction = client.predict(
-                audio_target=handle_file(target_audio_path),
-                audio_source=handle_file(source_audio_path),
-                f0_up_key=0,
-                f0_method="pm",
-                index_rate=0.6,
-                filter_radius=3,
-                resample_sr=0,
-                rms_mix_rate=0.25,
-                protect=0.33,
-                api_name="/predict"
-            )
-        except Exception:
             prediction = client.predict(
                 handle_file(target_audio_path),
                 handle_file(source_audio_path),
-                api_name="/predict"
+                0,        # pitch shift
+                "pm",     # f0 method
+                0.6,      # index rate
+                3,        # filter radius
+                0,        # resample sr
+                0.25,     # rms mix rate
+                0.33,     # protect
+                fn_index=0
             )
+        except Exception:
+            try:
+                prediction = client.predict(
+                    handle_file(target_audio_path),
+                    handle_file(source_audio_path),
+                    0, "pm", 0.6, 3, 0, 0.25, 0.33,
+                    fn_index=1
+                )
+            except Exception:
+                prediction = client.predict(
+                    handle_file(target_audio_path),
+                    handle_file(source_audio_path),
+                    fn_index=0
+                )
 
         if isinstance(prediction, (list, tuple)):
             output_audio_path = prediction[0] if len(prediction) > 0 else None
@@ -495,14 +508,18 @@ def handle_source_audio(message):
         with open(output_audio_path, "rb") as converted_audio:
             bot.send_voice(user_id, converted_audio, caption="✅ **Custom Target Voice ဖြင့် အသံပြောင်းပြီးပါပြီ**")
 
-        for p in [target_audio_path, source_audio_path]:
-            if p and os.path.exists(p):
-                os.remove(p)
-
     except Exception as e:
         bot.reply_to(message, f"❌ အသံပြောင်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
-    user_states.pop(user_id, None)
+    finally:
+        # ယာယီသိမ်းထားသော Audio ဖိုင်များကို ပြန်လည်ဖျက်ဆီးခြင်း
+        for p in [target_audio_path, source_audio_path]:
+            if p and os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
+        user_states.pop(user_id, None)
 
 
 # --- Bot ကို Thread နဲ့ Run ပြီး Flask ကို Main Thread မှာထားရန် ---
