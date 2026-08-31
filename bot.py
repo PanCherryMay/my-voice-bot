@@ -312,7 +312,7 @@ def handle_slip_photo(message):
         downloaded_file = bot.download_file(file_info.file_path)
         base64_image = base64.b64encode(downloaded_file).decode("utf-8")
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
 
         prompt_text = (
             "ဒီပုံသည် ငွေလွှဲပြေစာ (Payment Slip) ဟုတ်မဟုတ် သေချာစစ်ဆေးပါ။\n"
@@ -461,16 +461,25 @@ def handle_source_audio(message):
 
         client = Client(HF_SPACE_NAME)
 
+        # Gradio client error မတက်အောင် api_name ကို တစ်ခါတည်း သေချာ ထည့်ပေးထားပါတယ်
         try:
             prediction = client.predict(
-                handle_file(target_audio_path),
-                handle_file(source_audio_path),
-                fn_index=0
+                audio_target=handle_file(target_audio_path),
+                audio_source=handle_file(source_audio_path),
+                f0_up_key=0,
+                f0_method="pm",
+                index_rate=0.6,
+                filter_radius=3,
+                resample_sr=0,
+                rms_mix_rate=0.25,
+                protect=0.33,
+                api_name="/predict"
             )
         except Exception:
             prediction = client.predict(
                 handle_file(target_audio_path),
-                handle_file(source_audio_path)
+                handle_file(source_audio_path),
+                api_name="/predict"
             )
 
         if isinstance(prediction, (list, tuple)):
