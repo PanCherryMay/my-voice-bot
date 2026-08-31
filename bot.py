@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import base64
 import json
 import requests
@@ -430,7 +431,7 @@ def handle_target_audio(message):
         bot.reply_to(message, f"❌ Target အသံဖိုင် သိမ်းဆည်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
 
-# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (အမှားပြင်ဆင်ပြီး) ---
+# --- 2. Source Audio လက်ခံပြီး AI ဖြင့် အသံပြောင်းလဲခြင်း (Auto-Retry ထည့်သွင်းထားသည်) ---
 @bot.message_handler(content_types=["voice", "audio"])
 def handle_source_audio(message):
     user_id = message.chat.id
@@ -441,7 +442,7 @@ def handle_source_audio(message):
         bot.reply_to(message, "❌ ကျေးဇူးပြု၍ ပထမဦးစွာ /start နှိပ်၍ Step (1) Target Voice အသံဖိုင်ကို အရင် ပို့ပေးပါဦး။")
         return
 
-    status_msg = bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံနှစ်ခုကို ချိတ်ဆက်ကာ အသံပြောင်းလဲနေသည် ခဏစောင့်ပါ...")
+    bot.reply_to(message, "⚙️ Hugging Face RVC AI ဖြင့် အသံနှစ်ခုကို ချိတ်ဆက်ကာ အသံပြောင်းလဲနေသည် ခဏစောင့်ပါ...")
 
     source_audio_path = f"source_{user_id}.wav"
     try:
@@ -451,37 +452,34 @@ def handle_source_audio(message):
         with open(source_audio_path, "wb") as f:
             f.write(downloaded_file)
 
-        client = Client(HF_SPACE_NAME)
-
+        # Auto-Retry 3 ကြိမ် ပြုလုပ်မည့် Loop
+        max_retries = 3
         prediction = None
-        # Hugging Face Space ချိတ်ဆက်ခြင်းနှင့် ရလဒ်ယူခြင်း
-        try:
-            prediction = client.predict(
-                handle_file(target_audio_path),
-                handle_file(source_audio_path),
-                0,        # pitch shift
-                "pm",     # f0 method
-                0.6,      # index rate
-                3,        # filter radius
-                0,        # resample sr
-                0.25,     # rms mix rate
-                0.33,     # protect
-                fn_index=0
-            )
-        except Exception as e_first:
-            # Fallback handling
+        last_error = ""
+
+        for attempt in range(max_retries):
             try:
+                client = Client(HF_SPACE_NAME)
                 prediction = client.predict(
                     handle_file(target_audio_path),
                     handle_file(source_audio_path),
+                    0,        # pitch shift
+                    "pm",     # f0 method
+                    0.6,      # index rate
+                    3,        # filter radius
+                    0,        # resample sr
+                    0.25,     # rms mix rate
+                    0.33,     # protect
                     fn_index=0
                 )
-            except Exception as e_second:
-                raise Exception("Hugging Face Server Busy ဖြစ်နေပါသဖြင့် ရလဒ်မထွက်ပါ။ ခဏစောင့်ပြီး ပြန်လည်စမ်းသပ်ပေးပါ။")
+                if prediction:
+                    break
+            except Exception as ex:
+                last_error = str(ex)
+                if attempt < max_retries - 1:
+                    time.sleep(5)  # 5 စက္ကန့် စောင့်ပြီး ထပ်စမ်းမည်
 
-        # Result Parsing ဖြင့် Exception မတက်အောင် စစ်ဆေးခြင်း
         output_audio_path = None
-
         if isinstance(prediction, (list, tuple)) and len(prediction) > 0:
             output_audio_path = prediction[0]
         elif isinstance(prediction, dict) and len(prediction) > 0:
@@ -490,18 +488,15 @@ def handle_source_audio(message):
             output_audio_path = prediction
 
         if not output_audio_path or not os.path.exists(str(output_audio_path)):
-            raise Exception("AI Space မှ အသံဖိုင် ရလဒ် ထွက်မလာပါ သို့မဟုတ် Server တန့်သွားပါသည်။")
+            raise Exception("Hugging Face Server Busy ဖြစ်နေပါသဖြင့် အချိန်မီ ရလဒ်မထွက်လာပါ။ စက္ကန့်အနည်းငယ်အကြာတွင် ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။")
 
         with open(output_audio_path, "rb") as converted_audio:
             bot.send_voice(user_id, converted_audio, caption="✅ **Custom Target Voice ဖြင့် အသံပြောင်းပြီးပါပြီ**")
 
-    except IndexError:
-        bot.reply_to(message, "❌ **အသံပြောင်းရာတွင် အမှားဖြစ်သွားပါသည်။**\n(Hugging Face Space မှ GPU Server Busy ဖြစ်နေပါသဖြင့် ရလဒ် မထုတ်ပေးနိုင်ပါ။ မိနစ်အနည်းငယ်စောင့်ပြီး ပြန်လည်စမ်းသပ်ပေးပါခင်ဗျာ။)")
     except Exception as e:
         bot.reply_to(message, f"❌ အသံပြောင်းရာတွင် အမှားဖြစ်သွားပါသည်: {str(e)}")
 
     finally:
-        # ယာယီသိမ်းထားသော Audio ဖိုင်များကို ဖျက်ဆီးခြင်း
         for p in [target_audio_path, source_audio_path]:
             if p and os.path.exists(p):
                 try:
@@ -511,10 +506,14 @@ def handle_source_audio(message):
         user_states.pop(user_id, None)
 
 
-# --- Bot ကို Thread နဲ့ Run ပြီး Flask ကို Main Thread မှာထားရန် ---
+# --- Bot ကို Thread နဲ့ Run ပြီး Polling Conflict မဖြစ်အောင် ပြင်ဆင်ခြင်း ---
 def run_bot():
     print("Telegram Bot is running...")
-    bot.infinity_polling()
+    try:
+        bot.remove_webhook()
+    except Exception:
+        pass
+    bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot)
